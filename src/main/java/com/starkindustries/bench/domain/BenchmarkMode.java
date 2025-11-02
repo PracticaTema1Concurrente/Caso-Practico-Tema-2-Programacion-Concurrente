@@ -1,4 +1,7 @@
 package com.starkindustries.bench.domain;
 
-public class BenchmarkMode {
+public enum BenchmarkMode {
+    SEQUENTIAL,
+    EXECUTOR_SERVICE,
+    SPRING_ASYNC
 }
