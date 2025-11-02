@@ -1,4 +1,4 @@
-package com.starkindustries.casopracticotema2programacionconcurrente;
+package com.starkindustries.bench;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
