@@ -14,7 +14,7 @@ public class AsyncConfig {
         ThreadPoolTaskExecutor ex = new ThreadPoolTaskExecutor();
         ex.setCorePoolSize(4);        // valores por defecto (se pueden reajustar en runtime)
         ex.setMaxPoolSize(8);
-        ex.setQueueCapacity(0);       // ejecuta directamente, evita colas grandes que falseen la medición
+        ex.setQueueCapacity(1000);
         ex.setThreadNamePrefix("bench-");
         ex.initialize();
         return ex;

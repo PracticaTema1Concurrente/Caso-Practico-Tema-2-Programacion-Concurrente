@@ -1,8 +1,8 @@
 package com.starkindustries.bench.controller;
 
-import com.stark.bench.domain.BenchmarkRequest;
-import com.stark.bench.domain.RunSummary;
-import com.stark.bench.service.BenchmarkService;
+import com.starkindustries.bench.domain.BenchmarkRequest;
+import com.starkindustries.bench.domain.RunSummary;
+import com.starkindustries.bench.service.BenchmarkService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

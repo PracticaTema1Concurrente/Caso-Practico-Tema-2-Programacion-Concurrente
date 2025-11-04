@@ -1,7 +1,7 @@
 package com.starkindustries.bench.service;
 
-import com.stark.bench.domain.*;
-import com.stark.bench.util.Metrics;
+import com.starkindustries.bench.domain.*;
+import com.starkindustries.bench.util.Metrics;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 
