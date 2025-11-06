@@ -1,46 +1,45 @@
 package com.starkindustries.bench.controller;
 
-import com.starkindustries.bench.domain.BenchmarkRequest;
 import com.starkindustries.bench.domain.RunSummary;
+import com.starkindustries.bench.model.BenchmarkRunEntity;
+import com.starkindustries.bench.repo.BenchmarkRunRepository;
 import com.starkindustries.bench.service.BenchmarkService;
-import jakarta.validation.Valid;
+import com.starkindustries.bench.service.PersistenceService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/benchmark")
+@CrossOrigin(origins = "*")
 public class BenchmarkController {
 
     private final BenchmarkService benchmarkService;
+    private final PersistenceService persistenceService;
+    private final BenchmarkRunRepository runRepo;
 
-    public BenchmarkController(BenchmarkService benchmarkService) {
+    public BenchmarkController(BenchmarkService benchmarkService,
+                               PersistenceService persistenceService,
+                               BenchmarkRunRepository runRepo) {
         this.benchmarkService = benchmarkService;
+        this.persistenceService = persistenceService;
+        this.runRepo = runRepo;
     }
 
-    // POST /benchmark/start?tasks=50&threads=8
+    // POST /benchmark/start?tasks=150&threads=8
     @PostMapping("/start")
-    public ResponseEntity<RunSummary> start(
-            @Valid BenchmarkRequest req,
-            @RequestParam(name = "tasks", required = false) Integer tasksParam,
-            @RequestParam(name = "threads", required = false) Integer threadsParam
-    ) throws Exception {
-        // admite body form/query; prioriza query params
-        int tasks = tasksParam != null ? tasksParam : (req.getTasks() != null ? req.getTasks() : 50);
-        int threads = threadsParam != null ? threadsParam : (req.getThreads() != null ? req.getThreads() : 8);
-        return ResponseEntity.ok(benchmarkService.runBenchmark(tasks, threads));
+    public ResponseEntity<?> start(@RequestParam int tasks, @RequestParam int threads) throws Exception {
+        RunSummary summary = benchmarkService.runBenchmark(tasks, threads);
+        BenchmarkRunEntity saved = persistenceService.persistFromSummary(summary);
+        return ResponseEntity.ok(saved);
     }
 
-    // GET /benchmark/result
-    @GetMapping("/result")
-    public ResponseEntity<?> lastResult() {
-        RunSummary rs = benchmarkService.getLastSummary();
-        return rs == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(rs);
-    }
-
-    // GET /benchmark/modes
-    @GetMapping("/modes")
-    public ResponseEntity<?> modes() {
-        return ResponseEntity.ok(benchmarkService.availableModes());
+    // Histórico (ordenado desc por fecha)
+    @GetMapping("/runs")
+    public List<BenchmarkRunEntity> runs() {
+        return runRepo.findAll().stream()
+                .sorted((a,b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
+                .toList();
     }
 }
-

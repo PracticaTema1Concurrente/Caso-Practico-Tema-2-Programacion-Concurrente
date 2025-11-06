@@ -11,7 +11,7 @@ public class AsyncTaskService {
 
     @Async("benchExecutor")
     public CompletableFuture<Long> runAsyncTask(int workUnits) {
-        // Reutiliza la misma carga que SimulatedTask
-        return CompletableFuture.supplyAsync(() -> new SimulatedTask(workUnits).call());
+        long result = new SimulatedTask(workUnits).call();
+        return CompletableFuture.completedFuture(result);
     }
 }

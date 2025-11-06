@@ -1,5 +1,16 @@
 spring:
   main:
     banner-mode: "off"
+  datasource:
+    url: jdbc:postgresql://localhost:5433/benchdb
+    username: benchuser
+    password: benchpass
+  jpa:
+    hibernate:
+      ddl-auto: update   # crea/actualiza sin migraciones
+    show-sql: false
+    properties:
+      hibernate.format_sql: true
+
 server:
   port: 8080

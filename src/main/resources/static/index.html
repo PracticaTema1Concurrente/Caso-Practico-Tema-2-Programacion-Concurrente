@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <title>Benchmark Concurrencia — Dashboard</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <!-- Chart.js desde CDN (sin build tools) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+          --bg: #0b0b0c;
+          --card: #141416;
+          --muted: #9aa0a6;
+          --text: #e8eaed;
+          --accent: #6366f1;
+          --ok: #16a34a;
+          --err: #ef4444;
+          --border: #222327;
+        }
+        * { box-sizing: border-box; }
+        body {
+          margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+          color: var(--text); background: radial-gradient(1200px 600px at 10% -10%, #14151a 0%, var(--bg) 60%);
+        }
+        .wrap { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        h1 { font-size: 22px; margin: 0 0 16px 0; }
+        .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+        @media (min-width: 960px){ .grid { grid-template-columns: 320px 1fr; } }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+        .label { font-size: 12px; color: var(--muted); margin: 8px 0 6px; display:block; }
+        input[type="number"] {
+          width: 100%; background: #1a1b20; border: 1px solid var(--border);
+          color: var(--text); border-radius: 10px; padding: 10px 12px; outline: none;
+        }
+        .row { display: flex; gap: 8px; }
+        .btn {
+          display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+          padding: 10px 12px; border-radius: 10px; border: 1px solid transparent;
+          background: var(--accent); color: white; font-weight: 600; cursor: pointer;
+          transition: transform .05s ease, filter .2s ease; user-select: none;
+        }
+        .btn:active { transform: translateY(1px); }
+        .btn.secondary { background: #22232a; border-color: var(--border); color: var(--text); }
+        .btn.ghost { background: transparent; border-color: var(--border); color: var(--muted); }
+        .muted { color: var(--muted); font-size: 12px; }
+        .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+        @media (max-width: 720px){ .kpis { grid-template-columns: repeat(2, 1fr);} }
+        .kpi { background: #1a1b20; border:1px solid var(--border); border-radius:12px; padding:12px; }
+        .kpi .name { font-size: 12px; color: var(--muted); }
+        .kpi .val { font-size: 18px; font-weight: 700; margin-top: 4px; }
+        .kpi .ok { color: var(--ok); } .kpi .err { color: var(--err); }
+        .chart-wrap { height: 320px; }
+        .table-wrap { overflow: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+        th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--card); z-index: 1; }
+        .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); display: inline-block; }
+        .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .spacer { flex: 1; }
+        .switch { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+        .switch input { accent-color: var(--accent); }
+        .error { color: var(--err); font-size: 13px; margin-top: 8px; }
+        .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h1>Benchmark Concurrencia — Dashboard</h1>
+
+    <div class="grid">
+        <!-- Panel de control -->
+        <section class="card">
+            <label class="label">Tasks</label>
+            <input id="inTasks" type="number" min="1" value="150" />
+            <label class="label">Threads</label>
+            <input id="inThreads" type="number" min="1" value="8" />
+            <div class="row" style="margin-top:12px">
+                <button id="btnStart" class="btn">Lanzar benchmark</button>
+                <button id="btnReload" class="btn secondary">Recargar histórico</button>
+                <button id="btnCsv" class="btn ghost">Exportar CSV</button>
+            </div>
+            <div class="hint">Usa distintas combinaciones de <b>tasks</b> y <b>threads</b> para generar nuevas entradas.</div>
+            <div id="errBox" class="error" style="display:none"></div>
+
+            <div class="kpis">
+                <div class="kpi">
+                    <div class="name">Ejecuciones guardadas</div>
+                    <div id="kpiRuns" class="val">—</div>
+                </div>
+                <div class="kpi">
+                    <div class="name">Última: Tasks / Threads</div>
+                    <div id="kpiLastTT" class="val">—</div>
+                </div>
+                <div class="kpi">
+                    <div class="name">Última: Speedup máx.</div>
+                    <div id="kpiLastSpeedup" class="val ok">—</div>
+                </div>
+                <div class="kpi">
+                    <div class="name">Última: Efic. media</div>
+                    <div id="kpiLastEff" class="val">—</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Gráfico -->
+        <section class="card">
+            <div class="toolbar" style="margin-bottom:8px">
+                <div class="muted">Speedup por método</div>
+                <div class="spacer"></div>
+                <label class="switch"><input id="chkAuto" type="checkbox" /> Auto-refresh (10s)</label>
+            </div>
+            <div class="chart-wrap"><canvas id="chart"></canvas></div>
+        </section>
+    </div>
+
+    <!-- Tabla -->
+    <section class="card" style="margin-top:16px">
+        <div class="toolbar" style="margin-bottom:6px">
+            <div class="muted">Histórico</div>
+        </div>
+        <div class="table-wrap">
+            <table id="tbl">
+                <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Tasks</th>
+                    <th>Threads</th>
+                    <th>Modo</th>
+                    <th>Tiempo (ms)</th>
+                    <th>Speedup</th>
+                    <th>Eficiencia</th>
+                    <th>Run ID</th>
+                </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+<script>
+    // === Config ===
+    const API = `${location.origin}/benchmark`; // mismo origen (sirviendo estático desde Spring)
+
+    // === Estado ===
+    let runs = [];
+    let chart;
+    let autoTimer = null;
+
+    // === Utilidades ===
+    const $ = s => document.querySelector(s);
+    const fmt = (n, d=2) => (n ?? n === 0) ? Number(n).toFixed(d) : "—";
+    const toLocal = iso => new Date(iso).toLocaleString();
+
+    // Convierte histórico a datasets de Chart.js (líneas por 'mode', valor = speedup)
+    function buildChartData(runs) {
+      // Un label por ejecución (createdAt)
+      const labels = runs.slice().reverse().map(r => toLocal(r.createdAt));
+      // Detectar modos presentes
+      const modesSet = new Set();
+      runs.forEach(r => (r.results || []).forEach(res => modesSet.add(res.mode)));
+      const modes = Array.from(modesSet.values()).sort();
+
+      // Para cada modo, un array de puntos alineado con labels
+      const datasets = modes.map((mode, idx) => {
+        const data = runs.slice().reverse().map(run => {
+          const hit = (run.results || []).find(res => res.mode === mode);
+          return hit ? hit.speedup : null;
+        });
+        // Colores automáticos (hue variado)
+        const hue = Math.floor((idx / Math.max(1, modes.length)) * 300);
+        const color = `hsl(${hue}, 80%, 60%)`;
+        return {
+          label: mode, data,
+          borderColor: color, backgroundColor: color,
+          tension: 0.25, spanGaps: true, pointRadius: 3
+        };
+      });
+
+      return { labels, datasets };
+    }
+
+    function renderChart() {
+      const ctx = $("#chart").getContext("2d");
+      const { labels, datasets } = buildChartData(runs);
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: "line",
+        data: { labels, datasets },
+        options: {
+          maintainAspectRatio: false,
+          interaction: { mode: "nearest", intersect: false },
+          plugins: {
+            legend: { labels: { color: "#c9ced6" } },
+            tooltip: {
+              callbacks: {
+                label: (item) => {
+                  const v = item.raw;
+                  return `${item.dataset.label}: ${v == null ? "—" : fmt(v, 2)}×`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: { ticks: { color: "#9aa0a6" }, grid: { color: "#222327" } },
+            y: { ticks: { color: "#9aa0a6" }, grid: { color: "#222327" }, title: { display: true, text: "Speedup (×)" } }
+          }
+        }
+      });
+    }
+
+    function renderTable() {
+      const tbody = $("#tbl tbody");
+      tbody.innerHTML = "";
+      // Últimos primero
+      runs.forEach(run => {
+        (run.results || []).forEach(res => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${toLocal(run.createdAt)}</td>
+            <td>${run.totalTasks}</td>
+            <td>${run.threadsUsed}</td>
+            <td><span class="pill">${res.mode}</span></td>
+            <td>${res.timeMs ?? "—"}</td>
+            <td>${res.speedup != null ? fmt(res.speedup, 2) : "—"}</td>
+            <td>${res.efficiency != null ? fmt(res.efficiency, 2) : "—"}</td>
+            <td class="muted" title="${run.id}">${(run.id||"").slice(0,8)}…</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      });
+
+      // KPIs
+      $("#kpiRuns").textContent = runs.length || "0";
+      if (runs.length) {
+        const last = runs[0];
+        $("#kpiLastTT").textContent = `${last.totalTasks} / ${last.threadsUsed}`;
+        const speeds = (last.results||[]).map(r => r.speedup).filter(v => v != null);
+        const effs = (last.results||[]).map(r => r.efficiency).filter(v => v != null);
+        const maxSpeed = speeds.length ? Math.max(...speeds) : null;
+        const avgEff = effs.length ? (effs.reduce((a,b)=>a+b,0)/effs.length) : null;
+        $("#kpiLastSpeedup").textContent = maxSpeed != null ? fmt(maxSpeed, 2) : "—";
+        $("#kpiLastEff").textContent = avgEff != null ? fmt(avgEff, 2) : "—";
+      } else {
+        $("#kpiLastTT").textContent = "—";
+        $("#kpiLastSpeedup").textContent = "—";
+        $("#kpiLastEff").textContent = "—";
+      }
+    }
+
+    // === API ===
+    async function loadRuns() {
+      try {
+        $("#errBox").style.display = "none";
+        const res = await fetch(`${API}/runs`);
+        if (!res.ok) throw new Error("Error al cargar histórico");
+        const json = await res.json();
+        // Ordena desc por fecha (por si acaso)
+        runs = json.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+        renderChart();
+        renderTable();
+      } catch (e) {
+        $("#errBox").textContent = e.message || String(e);
+        $("#errBox").style.display = "";
+      }
+    }
+
+    async function startBenchmark() {
+      try {
+        $("#errBox").style.display = "none";
+        $("#btnStart").disabled = true;
+        $("#btnStart").textContent = "Ejecutando…";
+        const tasks = parseInt($("#inTasks").value || "0", 10);
+        const threads = parseInt($("#inThreads").value || "0", 10);
+        const url = `${API}/start?tasks=${encodeURIComponent(tasks)}&threads=${encodeURIComponent(threads)}`;
+        const res = await fetch(url, { method: "POST" });
+        if (!res.ok) {
+          const msg = await res.text();
+          throw new Error(msg || "Error al lanzar benchmark");
+        }
+        // Ignoramos el body; recargamos del histórico ya persistido
+        await loadRuns();
+      } catch (e) {
+        $("#errBox").textContent = e.message || String(e);
+        $("#errBox").style.display = "";
+      } finally {
+        $("#btnStart").disabled = false;
+        $("#btnStart").textContent = "Lanzar benchmark";
+      }
+    }
+
+    function exportCSV() {
+      // Aplana runs->results a filas CSV (speedup/efficiency)
+      const head = ["fecha","tasks","threads","modo","time_ms","speedup","efficiency","run_id"];
+      const rows = [head.join(",")];
+      runs.slice().reverse().forEach(run => {
+        (run.results||[]).forEach(r => {
+          const vals = [
+            toLocal(run.createdAt).replaceAll(",", ""),
+            run.totalTasks,
+            run.threadsUsed,
+            r.mode ?? "",
+            r.timeMs ?? "",
+            r.speedup ?? "",
+            r.efficiency ?? "",
+            run.id ?? ""
+          ];
+          rows.push(vals.join(","));
+        });
+      });
+      const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "benchmark_runs.csv";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    // === Eventos UI ===
+    $("#btnStart").addEventListener("click", startBenchmark);
+    $("#btnReload").addEventListener("click", loadRuns);
+    $("#btnCsv").addEventListener("click", exportCSV);
+    $("#chkAuto").addEventListener("change", (e) => {
+      if (e.target.checked) {
+        autoTimer = setInterval(loadRuns, 10000);
+      } else {
+        clearInterval(autoTimer); autoTimer = null;
+      }
+    });
+
+    // === Init ===
+    loadRuns();
+</script>
+</body>
+</html>
