@@ -15,7 +15,6 @@ public class BenchmarkService {
     private final AsyncTaskService asyncTaskService;
     private final ThreadPoolTaskExecutor benchExecutor;
 
-    // almacena el último resultado para GET /benchmark/result
     private volatile RunSummary lastSummary;
 
     public BenchmarkService(AsyncTaskService asyncTaskService,
@@ -24,88 +23,74 @@ public class BenchmarkService {
         this.benchExecutor = benchExecutor;
     }
 
-    public synchronized RunSummary runBenchmark(int tasks, int threads) throws Exception {
-        // 1) Modo secuencial (baseline)
+    public RunSummary runBenchmark(int tasks, int threads) throws Exception {
+        // 1) Secuencial
         long t0 = Metrics.now();
-        for (int i = 0; i < tasks; i++) {
-            new SimulatedTask(i % 7).call();
-        }
+        for (int i = 0; i < tasks; i++) new SimulatedTask(i % 7).call();
         long seqMs = Metrics.elapsedMs(t0);
 
-        // 2) Modo ExecutorService manual
-        long execMs = runWithExecutorService(tasks, threads);
+        // 2) Concurrente con ExecutorService (tipo configurable FIXED/CACHED)
+        long execMs = runWithExecutorService(tasks, threads, PoolType.FIXED); // o parámetro recibido
 
-        // 3) Modo Spring @Async
+        // 3) Asíncrono Spring @Async (reajustando el pool)
         long asyncMs = runWithSpringAsync(tasks, threads);
 
-        // speedup & efficiency (respecto a secuencial)
+        // métricas
+        double seqAvg = (double) seqMs / tasks;
+        double execAvg = (double) execMs / tasks;
+        double asyncAvg = (double) asyncMs / tasks;
+
         List<BenchmarkResult> results = new ArrayList<>();
-        results.add(new BenchmarkResult(BenchmarkMode.SEQUENTIAL, seqMs, 1.0, 1.0));
-        results.add(new BenchmarkResult(BenchmarkMode.EXECUTOR_SERVICE,
-                execMs,
+        results.add(new BenchmarkResult(BenchmarkMode.SEQUENTIAL,     seqMs, 1.0, 1.0, Metrics.round2(seqAvg)));
+        results.add(new BenchmarkResult(BenchmarkMode.EXECUTOR_SERVICE,execMs,
                 Metrics.round2((double) seqMs / execMs),
-                Metrics.round2(((double) seqMs / execMs) / threads)));
-        results.add(new BenchmarkResult(BenchmarkMode.SPRING_ASYNC,
-                asyncMs,
+                Metrics.round2(((double) seqMs / execMs) / threads),
+                Metrics.round2(execAvg)));
+        results.add(new BenchmarkResult(BenchmarkMode.SPRING_ASYNC,   asyncMs,
                 Metrics.round2((double) seqMs / asyncMs),
-                Metrics.round2(((double) seqMs / asyncMs) / threads)));
+                Metrics.round2(((double) seqMs / asyncMs) / threads),
+                Metrics.round2(asyncAvg)));
 
         RunSummary summary = new RunSummary(tasks, threads, results);
         this.lastSummary = summary;
         return summary;
     }
 
-    private long runWithExecutorService(int tasks, int threads) throws Exception {
-        ExecutorService pool = Executors.newFixedThreadPool(threads);
-        long start = Metrics.now();
-        try {
-            List<Future<Long>> futures = new ArrayList<>(tasks);
-            for (int i = 0; i < tasks; i++) {
-                futures.add(pool.submit(new SimulatedTask(i % 7)));
-            }
-            for (Future<Long> f : futures) f.get();
-        } finally {
-            pool.shutdown();
-            pool.awaitTermination(30, TimeUnit.SECONDS);
-        }
-        return Metrics.elapsedMs(start);
+    enum PoolType { FIXED, CACHED }
+
+    private long runWithExecutorService(int tasks, int threads, PoolType type) throws Exception {
+        ExecutorService pool = (type == PoolType.CACHED)
+                ? Executors.newCachedThreadPool()
+                : Executors.newFixedThreadPool(threads);
+
+        long t = Metrics.now();
+        List<Future<Long>> futures = new ArrayList<>();
+        for (int i = 0; i < tasks; i++) futures.add(pool.submit(new SimulatedTask(i % 7)));
+        for (Future<Long> f : futures) f.get();
+        pool.shutdown();
+        return Metrics.elapsedMs(t);
     }
 
     private long runWithSpringAsync(int tasks, int threads) throws Exception {
-        // Guardamos valores originales del bean para restaurarlos
-        int core0 = benchExecutor.getCorePoolSize();
-        int max0  = benchExecutor.getMaxPoolSize();
-
-        // Ajustamos temporalmente el tamaño de pool a la petición
+        // Reajuste dinámico del pool Spring
         benchExecutor.setCorePoolSize(threads);
         benchExecutor.setMaxPoolSize(threads);
 
-        long start = Metrics.now();
-        try {
-            List<CompletableFuture<Long>> futures = new ArrayList<>(tasks);
-            for (int i = 0; i < tasks; i++) {
-                futures.add(asyncTaskService.runAsyncTask(i % 7));
-            }
-            // Esperar a todas
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get(60, TimeUnit.SECONDS);
-        } finally {
-            // Restaurar configuración por defecto
-            benchExecutor.setCorePoolSize(core0);
-            benchExecutor.setMaxPoolSize(max0);
-        }
-        return Metrics.elapsedMs(start);
+        long t = Metrics.now();
+        List<CompletableFuture<Long>> futures = new ArrayList<>();
+        for (int i = 0; i < tasks; i++) futures.add(asyncTaskService.runAsyncTask(i % 7));
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        return Metrics.elapsedMs(t);
     }
 
-    public RunSummary getLastSummary() {
-        return lastSummary;
-    }
+    public RunSummary getLastSummary() { return lastSummary; }
 
     public List<String> availableModes() {
-        List<String> modes = new ArrayList<>();
-        modes.add(BenchmarkMode.SEQUENTIAL.name() + " — ejecución en un único hilo.");
-        modes.add(BenchmarkMode.EXECUTOR_SERVICE.name() + " — pool fijo/cached con java.util.concurrent.");
-        modes.add(BenchmarkMode.SPRING_ASYNC.name() + " — métodos @Async con ThreadPoolTaskExecutor.");
-        return modes;
+        return List.of(
+                BenchmarkMode.SEQUENTIAL.name() + " — ejecución en un único hilo.",
+                BenchmarkMode.EXECUTOR_SERVICE.name() + " — pool fijo/cached con java.util.concurrent.",
+                BenchmarkMode.SPRING_ASYNC.name() + " — métodos @Async con ThreadPoolTaskExecutor."
+        );
     }
 }
 

@@ -27,15 +27,31 @@ public class BenchmarkController {
         this.runRepo = runRepo;
     }
 
-    // POST /benchmark/start?tasks=150&threads=8
+    // POST /benchmark/start?tasks=50&threads=8&pool=fixed|cached
     @PostMapping("/start")
-    public ResponseEntity<?> start(@RequestParam int tasks, @RequestParam int threads) throws Exception {
-        RunSummary summary = benchmarkService.runBenchmark(tasks, threads);
-        BenchmarkRunEntity saved = persistenceService.persistFromSummary(summary);
-        return ResponseEntity.ok(saved);
+    public ResponseEntity<RunSummary> start(@RequestParam int tasks,
+                                            @RequestParam int threads,
+                                            @RequestParam(defaultValue = "fixed") String pool) throws Exception {
+        if (tasks < 1 || threads < 1) return ResponseEntity.badRequest().build();
+
+        RunSummary summary = benchmarkService.runBenchmark(tasks, threads /*, pool si lo usas */);
+        // Persistimos pero NO devolvemos la entidad
+        persistenceService.persistFromSummary(summary);
+        return ResponseEntity.ok(summary); // <- devuelve JSON plano esperado
     }
 
-    // Histórico (ordenado desc por fecha)
+    // Último resultado en memoria
+    @GetMapping("/result")
+    public ResponseEntity<RunSummary> last() {
+        RunSummary s = benchmarkService.getLastSummary();
+        return (s == null) ? ResponseEntity.noContent().build() : ResponseEntity.ok(s);
+    }
+
+    // Modos disponibles
+    @GetMapping("/modes")
+    public List<String> modes() { return benchmarkService.availableModes(); }
+
+    // Histórico (opcional, ya lo tenías)
     @GetMapping("/runs")
     public List<BenchmarkRunEntity> runs() {
         return runRepo.findAll().stream()
@@ -43,3 +59,4 @@ public class BenchmarkController {
                 .toList();
     }
 }
+

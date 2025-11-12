@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 
 @Entity
 @Table(name = "benchmark_run")
@@ -14,7 +15,7 @@ public class BenchmarkRunEntity {
     @Column(nullable = false, updatable = false)
     private String id = UUID.randomUUID().toString();
 
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
     @Column(nullable = false)
@@ -23,29 +24,17 @@ public class BenchmarkRunEntity {
     @Column(nullable = false)
     private int threadsUsed;
 
-    // BenchmarkRunEntity.java
-    @OneToMany(
-            mappedBy = "run",
-            cascade = CascadeType.ALL,
-            orphanRemoval = true,
-            fetch = FetchType.LAZY   // mejor LAZY para no arrastrar todo siempre
-    )
-    @com.fasterxml.jackson.annotation.JsonManagedReference
+    @OneToMany(mappedBy = "run", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JsonManagedReference
     private List<BenchmarkResultEntity> results = new ArrayList<>();
-
 
     public String getId() { return id; }
     public Instant getCreatedAt() { return createdAt; }
-
     public int getTotalTasks() { return totalTasks; }
     public void setTotalTasks(int totalTasks) { this.totalTasks = totalTasks; }
-
     public int getThreadsUsed() { return threadsUsed; }
     public void setThreadsUsed(int threadsUsed) { this.threadsUsed = threadsUsed; }
-
     public List<BenchmarkResultEntity> getResults() { return results; }
-    public void addResult(BenchmarkResultEntity r) {
-        r.setRun(this);
-        results.add(r);
-    }
+    public void addResult(BenchmarkResultEntity r) { r.setRun(this); results.add(r); }
 }
+

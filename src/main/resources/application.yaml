@@ -1,3 +1,9 @@
+stark:
+  executor:
+    core: 4
+    max: 8
+    queue: 1000
+
 spring:
   main:
     banner-mode: "off"
@@ -7,7 +13,7 @@ spring:
     password: benchpass
   jpa:
     hibernate:
-      ddl-auto: update   # crea/actualiza sin migraciones
+      ddl-auto: update
     show-sql: false
     properties:
       hibernate.format_sql: true
