@@ -75,3 +75,26 @@ POST /benchmark/start?tasks=50&threads=8
 ## Respuesta:
  
 { "totalTasks": 50, "threadsUsed": 8, "results": [ { "mode": "SEQUENTIAL", "timeMs": 4321, "speedup": 1.0, "efficiency": 1.0 }, { "mode": "EXECUTOR_SERVICE", "timeMs": 987, "speedup": 4.38, "efficiency": 0.55 }, { "mode": "SPRING_ASYNC", "timeMs": 1012, "speedup": 4.27, "efficiency": 0.53 } ] }
+
+# Breve explicación del proyecto:
+
+Este proyecto es una aplicación Spring Boot que permite medir y comparar el rendimiento de distintas formas de ejecutar tareas en Java. Cuando el usuario lanza un benchmark indicando cuántas tareas quiere ejecutar y cuántos hilos desea usar, la aplicación ejecuta esas tareas en tres modos distintos:
+
+### 1. Modo secuencial
+Las tareas se ejecutan una detrás de otra en un único hilo.
+
+### 2. Modo concurrente con ExecutorService
+Las tareas se reparten entre varios hilos gestionados manualmente por un pool de Java (FixedThreadPool o CachedThreadPool).
+
+### 3. Modo asíncrono con @Async de Spring
+Las tareas se ejecutan usando un ThreadPoolTaskExecutor configurado desde application.yaml y ajustado dinámicamente.
+
+En cada modo se mide el tiempo total de ejecución y, a partir de ahí, se calculan métricas como:
+
+- Speedup → cuántas veces más rápido es un modo respecto al secuencial
+
+- Eficiencia → qué porcentaje del paralelismo se aprovecha realmente
+
+- Promedio por tarea
+
+Finalmente, el resultado general (RunSummary) se devuelve en formato JSON y también se guarda en la base de datos para mantener un histórico.
